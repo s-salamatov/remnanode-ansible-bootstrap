@@ -1,0 +1,50 @@
+---
+# Disable dynamic MOTD/banner noise for cleaner SSH logins
+
+- name: Ensure motd-news is disabled
+  ansible.builtin.copy:
+    dest: /etc/default/motd-news
+    content: |
+      # Managed by Ansible - disable motd news fetch
+      ENABLED=0
+    owner: root
+    group: root
+    mode: "0644"
+  when: ansible_facts.os_family == "Debian"
+
+- name: Stop and disable motd-news timers/services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - motd-news.timer
+    - motd-news.service
+  when: ansible_facts.os_family == "Debian"
+
+- name: Gather update-motd scripts
+  ansible.builtin.find:
+    paths: /etc/update-motd.d
+    file_type: file
+  register: common_motd_scripts
+  when: ansible_facts.os_family == "Debian"
+
+- name: Remove execute bit from update-motd scripts
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    mode: "0644"
+  loop: "{{ common_motd_scripts.files }}"
+  loop_control:
+    label: "{{ item.path | regex_replace('^.*/', '') }}"
+  when:
+    - ansible_facts.os_family == "Debian"
+    - common_motd_scripts is defined
+
+- name: Blank out /etc/motd
+  ansible.builtin.copy:
+    dest: /etc/motd
+    content: ""
+    owner: root
+    group: root
+    mode: "0644"
+  when: ansible_facts.os_family == "Debian"

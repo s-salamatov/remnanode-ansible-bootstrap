@@ -1,0 +1,9 @@
+# Entry-point playbook that applies the common role to every Shield server
+- name: Bootstrap shield servers
+  hosts: project_shield
+  become: true
+  vars_files:
+    - ../group_vars/all/vault.yml
+
+  roles:
+    - common

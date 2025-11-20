@@ -1,0 +1,33 @@
+# Common role entrypoint – import task files in intended execution order
+- name: Include updates tasks
+  ansible.builtin.import_tasks: updates.yml
+
+- name: Include benchmarks tasks
+  ansible.builtin.import_tasks: benchmarks.yml
+
+- name: Include timezone tasks
+  ansible.builtin.import_tasks: timezone.yml
+
+- name: Include hostname tasks
+  ansible.builtin.import_tasks: hostname.yml
+
+- name: Include users tasks
+  ansible.builtin.import_tasks: users.yml
+
+- name: Include ssh tasks
+  ansible.builtin.import_tasks: ssh.yml
+
+- name: Include motd tasks
+  ansible.builtin.import_tasks: motd.yml
+
+- name: Include Tailscale tasks
+  ansible.builtin.import_tasks: tailscale.yml
+
+- name: Include firewall tasks
+  ansible.builtin.import_tasks: firewall.yml
+
+- name: Include docker tasks
+  ansible.builtin.import_tasks: docker.yml
+
+- name: Include Alloy tasks
+  ansible.builtin.import_tasks: alloy.yml

@@ -1,0 +1,5 @@
+# Placeholder so benchmark role imports are explicit in play output
+- name: Benchmarks are currently skipped
+  ansible.builtin.debug:
+    msg: >
+      Benchmarks are NOT configured. Skipped.

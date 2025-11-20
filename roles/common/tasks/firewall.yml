@@ -1,0 +1,49 @@
+---
+# Configure uncomplicated firewall (UFW) with Tailscale-friendly rules
+
+- name: Ensure ufw package is installed
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+  when: ansible_facts.os_family == "Debian"
+
+- name: Allow SSH from Tailnet range on custom port
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    src: 100.64.0.0/10
+    port: "{{ common_ssh_port }}"
+    comment: "SSH"
+  when: ansible_facts.os_family == "Debian"
+
+- name: Allow HTTPS traffic
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    port: "443"
+    comment: "Xray"
+  when: ansible_facts.os_family == "Debian"
+
+- name: Remove default OpenSSH allow rule
+  community.general.ufw:
+    rule: allow
+    name: OpenSSH
+    delete: true
+  when: ansible_facts.os_family == "Debian"
+
+- name: Enable ufw firewall
+  community.general.ufw:
+    state: enabled
+  when: ansible_facts.os_family == "Debian"
+
+- name: Update local SSH config hostname after tailscale/ufw
+  community.general.ssh_config:
+    ssh_config_file: "{{ common_local_ssh_config }}"
+    host: "{{ inventory_hostname }}"
+    hostname: "{{ inventory_hostname }}"
+  delegate_to: localhost
+  become: false
+  throttle: 1
+  when:
+    - ansible_facts.os_family == "Debian"
+    - common_local_ssh_config is defined

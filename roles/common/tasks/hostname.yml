@@ -1,0 +1,7 @@
+# Ensure system hostname matches inventory entry
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+  when:
+    - inventory_hostname != ansible_facts.hostname
+    - ansible_facts.os_family == "Debian"

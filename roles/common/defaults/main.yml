@@ -1,0 +1,40 @@
+---
+# Common role defaults (shared vars consumed by multiple tasks)
+common_timezone: UTC
+common_install_chrony: true
+common_reboot_needed: false
+common_ssh_port: 2000
+common_control_base_dir: "{{ lookup('env', 'HOME') ~ '/.ansible/common' }}"
+common_control_local_vars_dir: "{{ common_control_base_dir ~ '/local_vars' }}"
+common_control_generated_keys_dir: "{{ common_control_base_dir ~ '/generated_keys' }}"
+common_control_vault_password_file: "{{ common_control_base_dir ~ '/.vault_password' }}"
+common_tailscale_authkey: "{{ vault_common_tailscale_authkey | default('') }}"
+common_tailscale_login_server: "https://vpn.salamatov.net"
+common_tailscale_manual_download_base: "https://pkgs.tailscale.com/stable"
+common_tailscale_manual_metadata_url: >-
+  https://pkgs.tailscale.com/stable/?mode=json
+# Alloy/Grafana Cloud defaults
+common_alloy_install_script_url: >-
+  https://storage.googleapis.com/cloud-onboarding/alloy/scripts/install-linux.sh
+common_alloy_metrics_id: "{{ vault_common_alloy_metrics_id | default('') }}"
+common_alloy_metrics_url: "{{ vault_common_alloy_metrics_url | default('') }}"
+common_alloy_logs_id: "{{ vault_common_alloy_logs_id | default('') }}"
+common_alloy_logs_url: "{{ vault_common_alloy_logs_url | default('') }}"
+common_alloy_fm_url: "{{ vault_common_alloy_fm_url | default('') }}"
+common_alloy_fm_poll_frequency: "{{ vault_common_alloy_fm_poll_frequency | default('60s') }}"
+common_alloy_fm_hosted_id: "{{ vault_common_alloy_fm_hosted_id | default('') }}"
+common_alloy_integration_token: "{{ vault_common_alloy_integration_token | default('') }}"
+# Map Ansible-reported architectures to Tailscale tarball names
+common_tailscale_arch_map:
+  x86_64: amd64
+  amd64: amd64
+  aarch64: arm64
+  arm64: arm64
+  armv8l: arm64
+  armv8: arm64
+  armv7l: arm
+  armv7: arm
+  armhf: arm
+  arm: arm
+  i386: "386"
+  i686: "386"

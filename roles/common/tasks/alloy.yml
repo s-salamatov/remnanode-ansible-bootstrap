@@ -1,0 +1,124 @@
+# yamllint disable rule:line-length
+---
+# Install/update Grafana Alloy only when necessary
+- name: Prepare Alloy facts
+  ansible.builtin.set_fact:
+    common_alloy_binary_path: /usr/bin/alloy
+    common_alloy_config_path: /etc/alloy/config.alloy
+    common_alloy_arch: "{{ 'amd64' if ansible_architecture in ['x86_64', 'amd64'] else ('arm64' if ansible_architecture in ['aarch64', 'arm64'] else ansible_architecture) }}"
+
+- name: Fail if architecture is unsupported
+  ansible.builtin.fail:
+    msg: "Unsupported architecture for Alloy installer: {{ ansible_architecture }}"
+  when: common_alloy_arch not in ['amd64', 'arm64']
+
+- name: Build Alloy installer environment
+  ansible.builtin.set_fact:
+    common_alloy_install_env:
+      GCLOUD_HOSTED_METRICS_ID: "{{ common_alloy_metrics_id }}"
+      GCLOUD_HOSTED_METRICS_URL: "{{ common_alloy_metrics_url }}"
+      GCLOUD_HOSTED_LOGS_ID: "{{ common_alloy_logs_id }}"
+      GCLOUD_HOSTED_LOGS_URL: "{{ common_alloy_logs_url }}"
+      GCLOUD_FM_URL: "{{ common_alloy_fm_url }}"
+      GCLOUD_FM_POLL_FREQUENCY: "{{ common_alloy_fm_poll_frequency }}"
+      GCLOUD_FM_HOSTED_ID: "{{ common_alloy_fm_hosted_id }}"
+      GCLOUD_RW_API_KEY: "{{ common_alloy_integration_token }}"
+      ARCH: "{{ common_alloy_arch }}"
+
+- name: Validate Alloy installer environment
+  ansible.builtin.assert:
+    that:
+      - common_alloy_install_env.GCLOUD_HOSTED_METRICS_ID | default('') | length > 0
+      - common_alloy_install_env.GCLOUD_HOSTED_METRICS_URL | default('') | length > 0
+      - common_alloy_install_env.GCLOUD_HOSTED_LOGS_ID | default('') | length > 0
+      - common_alloy_install_env.GCLOUD_HOSTED_LOGS_URL | default('') | length > 0
+      - common_alloy_install_env.GCLOUD_FM_URL | default('') | length > 0
+      - common_alloy_install_env.GCLOUD_FM_POLL_FREQUENCY | default('') | length > 0
+      - common_alloy_install_env.GCLOUD_FM_HOSTED_ID | default('') | length > 0
+      - common_alloy_install_env.GCLOUD_RW_API_KEY | default('') | length > 0
+      - common_alloy_install_env.ARCH | default('') | length > 0
+    fail_msg: "Missing Grafana Alloy configuration values. Populate vault_common_alloy_* in group_vars/all/vault.yml."
+
+- name: Check for existing Alloy binary
+  ansible.builtin.stat:
+    path: "{{ common_alloy_binary_path }}"
+  register: common_alloy_binary_stat
+
+- name: Ensure /etc/alloy exists
+  ansible.builtin.file:
+    path: /etc/alloy
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure systemd drop-in dir exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/alloy.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Report pending Alloy install (check mode)
+  ansible.builtin.debug:
+    msg: "Alloy is not installed; installer script would run on a non-check execution."
+  when:
+    - ansible_check_mode
+    - not common_alloy_binary_stat.stat.exists
+
+- name: Install Grafana Alloy via official script
+  ansible.builtin.shell: |
+    /bin/sh -c "$(curl -fsSL {{ common_alloy_install_script_url }})"
+  args:
+    creates: "{{ common_alloy_binary_path }}"
+  environment: "{{ common_alloy_install_env }}"
+  when:
+    - not ansible_check_mode
+    - not common_alloy_binary_stat.stat.exists
+
+- name: Refresh Alloy binary state after install
+  ansible.builtin.stat:
+    path: "{{ common_alloy_binary_path }}"
+  register: common_alloy_binary_refresh
+  when:
+    - not ansible_check_mode
+    - not common_alloy_binary_stat.stat.exists
+
+- name: Update Alloy binary fact
+  ansible.builtin.set_fact:
+    common_alloy_binary_stat: "{{ common_alloy_binary_refresh }}"
+  when:
+    - not ansible_check_mode
+    - not common_alloy_binary_stat.stat.exists
+
+- name: Render Alloy configuration
+  ansible.builtin.template:
+    src: alloy/config.alloy.j2
+    dest: "{{ common_alloy_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: common_alloy_config
+  when: common_alloy_binary_stat.stat.exists
+  notify: Restart Alloy
+
+- name: Apply Alloy systemd environment drop-in
+  ansible.builtin.template:
+    src: alloy/env.conf.j2
+    dest: /etc/systemd/system/alloy.service.d/env.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: common_alloy_binary_stat.stat.exists
+  notify:
+    - Reload Alloy daemon
+    - Restart Alloy
+
+- name: Ensure Alloy service is enabled and running
+  ansible.builtin.systemd:
+    name: alloy
+    enabled: true
+    state: started
+  when: common_alloy_binary_stat.stat.exists
+# yamllint enable rule:line-length

@@ -1,0 +1,23 @@
+Port {{ common_ssh_port }}
+Protocol 2
+PermitRootLogin no
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+UsePAM yes
+X11Forwarding no
+AllowTcpForwarding no
+PermitTunnel no
+GatewayPorts no
+LogLevel VERBOSE
+AllowUsers {{ common_user_name }}
+
+ClientAliveInterval 300
+ClientAliveCountMax 6
+
+LoginGraceTime 30
+MaxAuthTries 3
+MaxSessions 10
+MaxStartups 2:30:10
+
+Banner none
+Subsystem sftp /usr/lib/openssh/sftp-server

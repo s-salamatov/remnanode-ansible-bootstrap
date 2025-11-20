@@ -1,0 +1,325 @@
+# Detect existing installations so we can skip reinstalling binaries
+- name: Check current Tailscale installation state
+  ansible.builtin.command: tailscale version
+  register: common_tailscale_install_check
+  changed_when: false
+  failed_when: false
+
+- name: Set Tailscale install flags
+  ansible.builtin.set_fact:
+    common_tailscale_is_installed: "{{ (common_tailscale_install_check.rc | default(1)) == 0 }}"
+    common_tailscale_needs_install: "{{ not ((common_tailscale_install_check.rc | default(1)) == 0) }}"
+
+- name: Load Tailscale auth key from vault if available
+  ansible.builtin.set_fact:
+    common_tailscale_authkey: "{{ vault_common_tailscale_authkey }}"
+  when: vault_common_tailscale_authkey is defined
+  no_log: true
+
+- name: Ensure Tailscale auth key is provided
+  ansible.builtin.assert:
+    that:
+      - common_tailscale_authkey | default('') | length > 0
+    fail_msg: "common_tailscale_authkey is required. Store it in group_vars/all/vault.yml as vault_common_tailscale_authkey."
+
+# --- Manual install flow for geo-restricted (RU) hosts ---
+- name: Determine manual Tailscale architecture (RU hosts)
+  ansible.builtin.set_fact:
+    common_tailscale_manual_arch: "{{ common_tailscale_arch_map[ansible_architecture] | default(ansible_architecture) }}"
+  when:
+    - "'region_ru' in group_names"
+    - common_tailscale_needs_install | default(true)
+
+- name: Fetch latest Tailscale metadata (RU hosts)
+  ansible.builtin.uri:
+    url: "{{ common_tailscale_manual_metadata_url }}"
+    method: GET
+    return_content: true
+    status_code: 200
+  check_mode: false
+  register: common_tailscale_manual_metadata
+  when:
+    - "'region_ru' in group_names"
+    - common_tailscale_needs_install | default(true)
+
+- name: Determine manual Tailscale version info (RU hosts)
+  vars:
+    metadata_json: >-
+      {{
+        common_tailscale_manual_metadata.json
+          if (common_tailscale_manual_metadata.json is defined and common_tailscale_manual_metadata.json is not none)
+          else (common_tailscale_manual_metadata.content | default('{}', true) | string | from_json)
+      }}
+  ansible.builtin.set_fact:
+    common_tailscale_manual_metadata_json: "{{ metadata_json }}"
+    common_tailscale_manual_tarball: "{{ metadata_json.get('Tarballs', {}).get(common_tailscale_manual_arch, '') }}"
+    common_tailscale_manual_version: "{{ metadata_json.get('Version') | default('unknown') }}"
+  when:
+    - "'region_ru' in group_names"
+    - common_tailscale_needs_install | default(true)
+
+- name: Ensure manual tarball is available for architecture (RU hosts)
+  ansible.builtin.fail:
+    msg: "No Tailscale tarball available for architecture {{ common_tailscale_manual_arch }}."
+  when:
+    - "'region_ru' in group_names"
+    - common_tailscale_needs_install | default(true)
+    - common_tailscale_manual_tarball | default('') == ''
+
+- name: Determine manual install temp directory (RU hosts)
+  ansible.builtin.set_fact:
+    common_tailscale_manual_tmp_dir: "{{ ansible_env.TMPDIR | default('/tmp') }}"
+  when:
+    - "'region_ru' in group_names"
+    - common_tailscale_needs_install | default(true)
+
+- name: Prepare manual Tailscale paths (RU hosts)
+  ansible.builtin.set_fact:
+    common_tailscale_manual_archive: "{{ common_tailscale_manual_tarball }}"
+    common_tailscale_manual_archive_path: "{{ common_tailscale_manual_tmp_dir }}/{{ common_tailscale_manual_tarball }}"
+    common_tailscale_manual_extract_dir: "{{ common_tailscale_manual_tmp_dir }}/{{ common_tailscale_manual_tarball | regex_replace('\\.tgz$', '') }}"
+    common_tailscale_manual_download_url: "{{ common_tailscale_manual_download_base }}/{{ common_tailscale_manual_tarball }}"
+  when:
+    - "'region_ru' in group_names"
+    - common_tailscale_needs_install | default(true)
+
+# Provide a summary when running with --check so operators know the intended actions
+- name: Show manual Tailscale install plan (RU hosts, check mode)
+  ansible.builtin.debug:
+    msg: >
+      Would download {{ common_tailscale_manual_archive }} from
+      {{ common_tailscale_manual_download_url }} and install binaries
+      into /usr/local/bin on {{ inventory_hostname }}.
+  when:
+    - "'region_ru' in group_names"
+    - ansible_check_mode
+    - common_tailscale_needs_install | default(true)
+
+# Execute the manual installation with rollback safeguards
+- name: Install Tailscale manually on RU hosts
+  when:
+    - "'region_ru' in group_names"
+    - common_tailscale_needs_install | default(true)
+    - not ansible_check_mode
+  block:
+    - name: Download manual Tailscale archive
+      ansible.builtin.get_url:
+        url: "{{ common_tailscale_manual_download_url }}"
+        dest: "{{ common_tailscale_manual_archive_path }}"
+        mode: "0644"
+
+    - name: Extract manual Tailscale archive
+      ansible.builtin.unarchive:
+        src: "{{ common_tailscale_manual_archive_path }}"
+        dest: "{{ common_tailscale_manual_tmp_dir }}"
+        remote_src: true
+        creates: "{{ common_tailscale_manual_extract_dir }}/tailscale"
+
+    - name: Install Tailscale binaries manually
+      ansible.builtin.copy:
+        src: "{{ common_tailscale_manual_extract_dir }}/{{ item.src }}"
+        dest: "/usr/local/bin/{{ item.dest }}"
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: true
+      loop:
+        - { src: "tailscale", dest: "tailscale" }
+        - { src: "tailscaled", dest: "tailscaled" }
+
+    - name: Install Tailscale systemd unit file
+      ansible.builtin.copy:
+        src: "{{ common_tailscale_manual_extract_dir }}/systemd/tailscaled.service"
+        dest: /etc/systemd/system/tailscaled.service
+        owner: root
+        group: root
+        mode: "0644"
+        remote_src: true
+
+    - name: Install tailscaled defaults file
+      ansible.builtin.copy:
+        dest: /etc/default/tailscaled
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by Ansible. Override tailscaled environment variables here.
+
+    - name: Create Tailscale data directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /var/lib/tailscale
+        - /run/tailscale
+
+    - name: Ensure tailscale binaries are available in /usr/sbin
+      ansible.builtin.file:
+        src: "/usr/local/bin/{{ item }}"
+        dest: "/usr/sbin/{{ item }}"
+        state: link
+      loop:
+        - tailscale
+        - tailscaled
+
+    - name: Enable tailscaled service
+      ansible.builtin.systemd:
+        name: tailscaled
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Verify manual Tailscale installation
+      ansible.builtin.command: tailscale version
+      register: common_tailscale_manual_version_check
+      changed_when: false
+
+  rescue:
+    - name: Stop tailscaled after failed manual install
+      ansible.builtin.systemd:
+        name: tailscaled
+        state: stopped
+        enabled: false
+        daemon_reload: true
+      failed_when: false
+
+    - name: Remove installed files after failed manual install
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/tailscale
+        - /usr/local/bin/tailscaled
+        - /etc/systemd/system/tailscaled.service
+        - /etc/default/tailscaled
+        - /usr/sbin/tailscale
+        - /usr/sbin/tailscaled
+      failed_when: false
+
+    - name: Fail manual Tailscale installation
+      ansible.builtin.fail:
+        msg: "Manual Tailscale installation failed on {{ inventory_hostname }} and was rolled back."
+
+  always:
+    - name: Remove manual install artifacts
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      when: item != ""
+      loop:
+        - "{{ common_tailscale_manual_archive_path | default('') }}"
+        - "{{ common_tailscale_manual_extract_dir | default('') }}"
+
+# --- Official installer path for hosts without geo restrictions ---
+- name: Download and install Tailscale if missing (non-RU, non-check mode)
+  ansible.builtin.shell: | # noqa command-instead-of-module
+    set -o pipefail
+    curl -fsSL https://tailscale.com/install.sh | sh
+  args:
+    warn: false
+    creates: /usr/bin/tailscale
+  when:
+    - "'region_ru' not in group_names"
+    - not ansible_check_mode
+    - common_tailscale_needs_install | default(true)
+  register: common_tailscale_install_result
+
+# ---- tailscale up ----
+
+# At this point binaries exist on every host, so configure the daemon uniformly
+- name: Bring up tailscale connection (non-check mode)
+  ansible.builtin.command: >
+    tailscale up
+    --reset
+    --login-server={{ common_tailscale_login_server }}
+    --authkey={{ common_tailscale_authkey }}
+    --ssh
+    --hostname={{ inventory_hostname }}
+    --operator={{ common_user_name }}
+    --accept-dns
+    --accept-routes
+    --advertise-connector
+    --advertise-exit-node
+  when:
+    - not ansible_check_mode
+  register: common_tailscale_up_result
+  changed_when: "'already' not in (common_tailscale_up_result.stdout | default(''))"
+
+- name: Check tailscale presence and show intended up command (check mode)
+  ansible.builtin.command: tailscale status
+  register: common_tailscale_status_check_result
+  changed_when: false
+  failed_when: common_tailscale_status_check_result.rc != 0
+  when:
+    - ansible_check_mode
+
+# ---- exit-node LAN access ----
+
+- name: Gather Tailscale preferences (non-check mode)
+  ansible.builtin.command: tailscale debug prefs
+  register: common_tailscale_prefs_raw
+  changed_when: false
+  failed_when: common_tailscale_prefs_raw.rc != 0
+  when:
+    - not ansible_check_mode
+
+- name: Parse Tailscale preferences (non-check mode)
+  ansible.builtin.set_fact:
+    common_tailscale_prefs: "{{ common_tailscale_prefs_raw.stdout | default('{}') | from_json }}"
+  when:
+    - not ansible_check_mode
+
+- name: Determine exit-node LAN access state (non-check mode)
+  ansible.builtin.set_fact:
+    common_tailscale_exit_node_allow_lan: "{{ common_tailscale_prefs.ExitNodeAllowLANAccess | default(false) }}"
+    common_tailscale_current_hostname: "{{ common_tailscale_prefs.Hostname | default('') }}"
+  when:
+    - not ansible_check_mode
+
+- name: Ensure Tailscale hostname matches inventory name (non-check mode)
+  ansible.builtin.command: >
+    tailscale set --hostname={{ inventory_hostname }}
+  register: common_tailscale_hostname_set
+  changed_when: common_tailscale_hostname_set.rc == 0
+  failed_when: common_tailscale_hostname_set.rc != 0
+  when:
+    - not ansible_check_mode
+    - common_tailscale_current_hostname is defined
+    - common_tailscale_current_hostname != inventory_hostname
+
+- name: Allow LAN access on exit-node (non-check mode)
+  ansible.builtin.command: >
+    tailscale set --exit-node-allow-lan-access
+  register: common_tailscale_exit_node_set_result
+  changed_when: common_tailscale_exit_node_set_result.rc == 0
+  failed_when: common_tailscale_exit_node_set_result.rc != 0
+  when:
+    - not ansible_check_mode
+    - common_tailscale_exit_node_allow_lan is defined
+    - not common_tailscale_exit_node_allow_lan
+
+- name: Show would-be tailscale set command (check mode)
+  ansible.builtin.debug:
+    msg: >
+      Would run on {{ inventory_hostname }}:
+      tailscale set --exit-node-allow-lan-access
+  when:
+    - ansible_check_mode
+
+# ---- status ----
+
+- name: Show tailscale status (non-check mode)
+  ansible.builtin.command: tailscale status
+  register: common_tailscale_status_result
+  changed_when: false
+  when:
+    - not ansible_check_mode
+
+- name: Debug tailscale status (non-check mode)
+  ansible.builtin.debug:
+    var: common_tailscale_status_result.stdout
+  when:
+    - not ansible_check_mode

@@ -1,0 +1,174 @@
+# User management: load/create credentials locally and provision them remotely
+# --- Local credential caching on control host ---
+- name: Ensure local dir for stored user vars exists
+  ansible.builtin.file:
+    path: "{{ common_control_local_vars_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Check if stored user vars file exists
+  ansible.builtin.stat:
+    path: "{{ common_control_local_vars_dir }}/{{ inventory_hostname }}.yml"
+  register: common_users_user_vars_file_stat
+  delegate_to: localhost
+  become: false
+
+- name: Load stored user vars for this host if present
+  ansible.builtin.include_vars:
+    file: "{{ common_control_local_vars_dir }}/{{ inventory_hostname }}.yml"
+    name: stored_user_vars
+  when: common_users_user_vars_file_stat.stat.exists
+  delegate_to: localhost
+  become: false
+
+- name: Use stored user vars if available
+  ansible.builtin.set_fact:
+    common_user_name: "{{ stored_user_vars.common_user_name }}"
+    common_user_password: "{{ stored_user_vars.common_user_password }}"
+  when:
+    - stored_user_vars is defined
+    - stored_user_vars.common_user_name is defined
+    - stored_user_vars.common_user_password is defined
+
+- name: Ensure local dir for generated keys exists
+  ansible.builtin.file:
+    path: "{{ common_control_generated_keys_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Generate random username
+  ansible.builtin.set_fact:
+    common_user_name: "{{ lookup('community.general.random_string',
+                                  length=10,
+                                  lower=true,
+                                  upper=false,
+                                  numbers=true,
+                                  special=false) }}"
+  when: common_user_name is not defined
+
+- name: Generate random password
+  ansible.builtin.set_fact:
+    common_user_password: "{{ lookup('community.general.random_string', length=18, upper=true, numbers=true, special=true) }}"
+  when: common_user_password is not defined
+
+- name: Set local SSH helper paths
+  ansible.builtin.set_fact:
+    common_local_ssh_dir: "{{ lookup('env', 'HOME') ~ '/.ssh' }}"
+    common_local_ssh_config: "{{ lookup('env', 'HOME') ~ '/.ssh/config' }}"
+    common_local_private_key: "{{ lookup('env', 'HOME') ~ '/.ssh/' ~ inventory_hostname ~ '_' ~ common_user_name ~ '.key' }}"
+
+- name: Ensure local SSH directory exists
+  ansible.builtin.file:
+    path: "{{ common_local_ssh_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+
+- name: Persist generated user vars locally
+  ansible.builtin.copy:
+    dest: "{{ common_control_local_vars_dir }}/{{ inventory_hostname }}.yml"
+    content: |
+      common_user_name: "{{ common_user_name }}"
+      common_user_password: "{{ common_user_password }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  when: stored_user_vars is not defined
+
+# --- Remote user provisioning ---
+- name: Create system user
+  ansible.builtin.user:
+    name: "{{ common_user_name }}"
+    password: "{{ common_user_password | password_hash('sha512') }}"
+    shell: /bin/bash
+    state: present
+    create_home: true
+
+- name: Add user to sudo group
+  ansible.builtin.user:
+    name: "{{ common_user_name }}"
+    groups: sudo
+    append: true
+
+- name: Allow no-password sudo
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ common_user_name }}"
+    content: "{{ common_user_name }} ALL=(ALL) NOPASSWD: ALL"
+    owner: root
+    group: root
+    mode: "0440"
+
+- name: Generate SSH keypair locally
+  community.crypto.openssh_keypair:
+    path: "{{ common_control_generated_keys_dir }}/{{ inventory_hostname }}_{{ common_user_name }}.key"
+    type: ed25519
+  delegate_to: localhost
+  register: common_users_generated_keypair
+  become: false
+
+- name: Copy private key into local SSH directory
+  ansible.builtin.copy:
+    src: "{{ common_control_generated_keys_dir }}/{{ inventory_hostname }}_{{ common_user_name }}.key"
+    dest: "{{ common_local_private_key }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+
+- name: Ensure SSH config has user and key for host
+  community.general.ssh_config:
+    ssh_config_file: "{{ common_local_ssh_config }}"
+    host: "{{ inventory_hostname }}"
+    identity_file: "{{ common_local_private_key }}"
+    remote_user: "{{ common_user_name }}"
+    state: present
+  delegate_to: localhost
+  become: false
+  throttle: 1
+
+- name: Note that this SSH config block is managed by Ansible
+  ansible.builtin.lineinfile:
+    path: "{{ common_local_ssh_config }}"
+    regexp: "^# Ansible managed host {{ inventory_hostname }}"
+    line: "# Ansible managed host {{ inventory_hostname }} (common role)"
+    insertbefore: "^Host\\s+{{ inventory_hostname }}$"
+    create: true
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  throttle: 1
+
+- name: Annotate password in SSH config (comment)
+  ansible.builtin.lineinfile:
+    path: "{{ common_local_ssh_config }}"
+    regexp: "^\\s*# Password(?: for {{ inventory_hostname }})?:"
+    line: "    # Password for {{ inventory_hostname }}: {{ common_user_password }}"
+    insertafter: "^Host\\s+{{ inventory_hostname }}$"
+    create: true
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  throttle: 1
+
+- name: Deploy authorized key to remote user
+  ansible.posix.authorized_key:
+    user: "{{ common_user_name }}"
+    key: "{{ common_users_generated_keypair.public_key }}"
+
+- name: Show generated credentials summary
+  ansible.builtin.debug:
+    msg: |
+      Host: {{ inventory_hostname }}
+      User: {{ common_user_name }}
+      Password: {{ common_user_password }}
+      Private key (local cache): {{ common_control_generated_keys_dir }}/{{ inventory_hostname }}_{{ common_user_name }}.key
+      Private key (ssh config copy): {{ common_local_private_key }}
+      SSH config entry: {{ common_local_ssh_config }}
+  delegate_to: localhost
+  become: false

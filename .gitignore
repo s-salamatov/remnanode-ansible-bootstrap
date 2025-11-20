@@ -1,0 +1,10 @@
+# Local and generated artifacts (kept under ~/.ansible/common now, but ignore any stragglers here)
+.ansible/
+.vault_password
+local_vars/
+generated_keys/
+*.retry
+
+# Python/Ansible cache
+__pycache__/
+.pytest_cache/

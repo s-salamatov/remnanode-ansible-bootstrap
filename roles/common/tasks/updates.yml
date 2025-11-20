@@ -1,0 +1,89 @@
+# Patch, upgrade, and configure unattended updates on Debian hosts
+- name: Remove Docker repo entries from /etc/apt/sources.list
+  ansible.builtin.lineinfile:
+    path: /etc/apt/sources.list
+    regexp: '^.*download\.docker\.com.*$'
+    state: absent
+  check_mode: false
+  when: ansible_facts.os_family == "Debian"
+
+- name: Find legacy Docker apt sources
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns: "*docker*.list*"
+    file_type: file
+  register: common_docker_repo_files
+  when: ansible_facts.os_family == "Debian"
+
+- name: Remove legacy Docker apt sources to avoid conflicts
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  check_mode: false
+  loop: "{{ common_docker_repo_files.files }}"
+  when:
+    - ansible_facts.os_family == "Debian"
+    - common_docker_repo_files is defined
+    - common_docker_repo_files.matched | default(0) > 0
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  when: ansible_facts.os_family == "Debian"
+
+- name: Upgrade all packages (non-interactive)
+  ansible.builtin.apt:
+    upgrade: dist
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  when: ansible_facts.os_family == "Debian"
+
+- name: Autoremove unused packages
+  ansible.builtin.apt:
+    autoremove: true
+  when: ansible_facts.os_family == "Debian"
+
+- name: Check if reboot is required
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: common_updates_reboot_required_stat
+  when: ansible_facts.os_family == "Debian"
+
+- name: Set common_reboot_needed fact
+  ansible.builtin.set_fact:
+    common_reboot_needed: "{{ common_updates_reboot_required_stat.stat.exists | default(false) }}"
+  when: ansible_facts.os_family == "Debian"
+
+# --- automatic security updates (no auto reboot) ---
+
+- name: Ensure unattended-upgrades package is installed
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+  when: ansible_facts.os_family == "Debian"
+
+- name: Enable periodic unattended upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+  when: ansible_facts.os_family == "Debian"
+
+- name: Configure unattended-upgrades to avoid automatic reboot
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/51unattended-upgrades-local
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      // Local overrides for unattended-upgrades
+      Unattended-Upgrade::Automatic-Reboot "false";
+      Unattended-Upgrade::Automatic-Reboot-WithUsers "false";
+  when: ansible_facts.os_family == "Debian"

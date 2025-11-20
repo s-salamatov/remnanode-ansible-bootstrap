@@ -1,0 +1,37 @@
+# Harden sshd_config and verify before reloading service
+- name: Backup old sshd_config
+  ansible.builtin.copy:
+    src: /etc/ssh/sshd_config
+    dest: /etc/ssh/sshd_config.bak
+    remote_src: true
+    mode: "0600"
+
+- name: Deploy hardened SSH config
+  ansible.builtin.template:
+    src: ssh/sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart SSH Safely
+
+- name: Test sshd config
+  ansible.builtin.command: sshd -t
+  register: common_ssh_config_test_result
+  changed_when: false
+  failed_when: common_ssh_config_test_result.rc != 0
+
+- name: Soft reload SSH service
+  ansible.builtin.service:
+    name: ssh
+    state: reloaded
+
+- name: Update local SSH config port for host
+  community.general.ssh_config:
+    ssh_config_file: "{{ common_local_ssh_config }}"
+    host: "{{ inventory_hostname }}"
+    port: "{{ common_ssh_port | string }}"
+  delegate_to: localhost
+  become: false
+  throttle: 1
+  when: common_local_ssh_config is defined

@@ -1,0 +1,46 @@
+# Handle timezone configuration and time sync services
+- name: Get current timezone
+  ansible.builtin.command: timedatectl show -p Timezone --value
+  register: common_timezone_current_result
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_facts.os_family == "Debian"
+    - ansible_facts.service_mgr == "systemd"
+
+- name: Set timezone to {{ common_timezone }}
+  ansible.builtin.command: "timedatectl set-timezone {{ common_timezone }}"
+  changed_when: common_timezone_current_result.stdout != common_timezone
+  when:
+    - ansible_facts.os_family == "Debian"
+    - ansible_facts.service_mgr == "systemd"
+    - common_timezone_current_result is defined
+    - common_timezone_current_result.stdout is defined
+    - common_timezone_current_result.stdout != common_timezone
+    - not ansible_check_mode
+
+- name: Install chrony
+  ansible.builtin.apt:
+    name: chrony
+    state: present
+  when:
+    - ansible_facts.os_family == "Debian"
+    - common_install_chrony | bool
+
+- name: Ensure chrony is enabled and running
+  ansible.builtin.service:
+    name: chrony
+    state: started
+    enabled: true
+  when:
+    - ansible_facts.os_family == "Debian"
+    - common_install_chrony | bool
+
+- name: Force time sync with chrony
+  ansible.builtin.command: chronyc -a 'makestep'
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_facts.os_family == "Debian"
+    - common_install_chrony | bool
+    - not ansible_check_mode
