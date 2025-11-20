@@ -1,4 +1,4 @@
-# Inventory Guidelines (how to read/maintain inventory/hosts.yml)
+# Inventory Guidelines (Remnanode Ansible Bootstrap)
 
 ## Format
 - Use the YAML inventory stored at `inventory/hosts.yml`. INI files are no longer supported here.
@@ -7,7 +7,7 @@
 
 ## Groups & Variables
 - We maintain four category trees under `all.children`:
-  - `project.*` (e.g., `project_shield`)
+  - `project.*` (e.g., `project_remnanode`)
   - `environment.*` (`env_prod`, `env_dev`, …)
   - `region.*` (`region_us`, `region_ru`, …)
   - `role.*` (`role_proxy`, etc.)
@@ -15,8 +15,8 @@
   ```yaml
   all:
     hosts:
-      shield-proxy-de-1-prod:
-        project: shield
+      remnanode-proxy-de-1-prod:
+        project: remnanode
         role: proxy
         env: prod
         region: de
@@ -25,7 +25,7 @@
         children:
           region_de:
             hosts:
-              shield-proxy-de-1-prod: {}
+              remnanode-proxy-de-1-prod: {}
   ```
 - Store shared settings in `group_vars/<group>.yml`; only host-specific overrides (e.g., `region`, `env`) should live under `all.hosts`.
 

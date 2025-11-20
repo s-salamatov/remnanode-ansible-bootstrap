@@ -1,33 +1,33 @@
-# Краткое руководство для контрибьюторов
+# Contributing to Remnanode Ansible Bootstrap
 
-## Принципы
-- Изменения должны быть идемпотентными: повторный запуск плейбука не ломает состояние.
-- Не добавляйте секреты в открытом виде. Все чувствительные данные — только в `group_vars/all/vault.yml` через `vault_common_*`.
-- Поддерживайте структуру инвентаря (`inventory/README.md`) и документацию в актуальном состоянии.
-- Локальные артефакты (`~/.ansible/common/...`) не должны попадать в репозиторий.
+## Principles
+- Keep changes idempotent: rerunning playbooks must not break state.
+- No plaintext secrets in code. All sensitive values belong in `group_vars/all/vault.yml` as `vault_*`.
+- Maintain inventory structure (`inventory/README.md`) and documentation alongside code changes.
+- Local artifacts (`~/.ansible/common/...`) must never be committed.
 
-## Перед отправкой изменений
-1. Обновите/расширьте документацию, если меняется структура, переменные или поведение ролей.
-2. Проверьте синтаксис/лог, запустив:
+## Before sending changes
+1. Update docs if structure, variables, or role behavior changes.
+2. Run sanity checks:
    - `ansible-inventory --list -i inventory/hosts.yml`
-   - При необходимости `ansible-playbook playbooks/shield-bootstrap.yml -l <host> --check`
-3. Убедитесь, что новые переменные не содержат секретов по умолчанию — используйте placeholders и Vault.
-4. Если добавляете новые роли/таски, придерживайтесь уже принятой структуры (`roles/common/...`) и используйте модули Ansible, а не shell, где это возможно.
+   - Optionally `ansible-playbook playbooks/remnanode-bootstrap.yml -l <host> --check`
+3. Ensure new vars have no secret defaults; use placeholders + Vault mappings.
+4. When adding roles/tasks, follow the existing layout (`roles/common/...`) and prefer Ansible modules over shell.
 
-## Работа с Vault
-- Пароль лежит вне репозитория: `~/.ansible/common/.vault_password`.
-- Редактирование: `ansible-vault edit group_vars/all/vault.yml`.
-- Добавляйте секреты как `vault_<namespace>_<name>` и прокидывайте их через defaults/vars.
+## Vault workflow
+- Vault password is outside the repo: `~/.ansible/common/.vault_password`.
+- Edit secrets: `ansible-vault edit group_vars/all/vault.yml`.
+- Add secrets as `vault_<namespace>_<name>` and expose them via defaults/vars before use.
 
-## SSH и локальные пути
-- Роль сама управляет ключами и конфигом SSH. Не хардкодьте пути к ключам, используйте переменные `common_control_*`.
-- При правке шаблонов, завязанных на env vars (Alloy), синхронизируйте значения между шаблоном и `env.conf.j2`.
+## SSH and local paths
+- The role manages SSH keys/config automatically. Don’t hardcode paths; use `common_control_*` vars.
+- If you change env-var–driven templates (Alloy), keep them in sync with `env.conf.j2`.
 
-## Стиль YAML/Ansible
-- Отступы 2 пробела, без табов.
-- Регистрируйте переменные через `register:` только при необходимости.
-- Докладывайте важные изменения через `debug` минимально, без лишнего шума.
+## YAML/Ansible style
+- 2-space indents, no tabs.
+- Use `register:` only when needed.
+- Keep `debug` output minimal and relevant.
 
-## Тестирование
-- Минимум — `--check` на одном хосте/группе.
-- Если трогаете SSH/сеть, внимательно проверяйте `handlers` и idempotency портов/hostnames в `~/.ssh/config`.
+## Testing
+- Minimum: `--check` on one host/group.
+- When touching SSH/networking, verify handlers and idempotency of port/hostname updates in `~/.ssh/config`.

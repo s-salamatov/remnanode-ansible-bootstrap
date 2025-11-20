@@ -1,73 +1,73 @@
-# Shield Ansible Project
+# Remnanode Ansible Bootstrap
 
-Комплект плейбуков и ролей для автоматической первичной настройки shield-хостов (пользователи, SSH, Tailscale, firewall, Alloy и т.д.). Контроллер хранит чувствительные данные и кэш только локально, чтобы репозиторий можно было публиковать.
+Playbooks and a common role to bootstrap and harden new remnanode hosts: users and SSH keys, hardened SSHD, Tailscale, UFW, Docker, and Grafana Alloy. All sensitive data and caches live outside the repo so it’s safe to publish under `remnanode-ansible-bootstrap`.
 
-## Требования
-- Ansible 9+ (проверено на ansible-core 2.16 / ansible 12.2).
-- Python 3.x на контроллере.
-- Доступ по SSH к целевым хостам с параметрами, которые выдаёт провайдер (до первого запуска плейбука).
+## Requirements
+- Ansible 9+ (tested with ansible-core 2.16 / ansible 12.2).
+- Python 3.x on the control host.
+- SSH access to targets with the provider’s initial credentials for the first run.
 
-## Структура
-- `inventory/hosts.yml` — основной инвентарь (формат описан в `inventory/README.md`).
-- `group_vars/` — групповые переменные; `group_vars/all/vault.yml` содержит все секреты (Ansible Vault).
-- `playbooks/` — точка входа `playbooks/shield-bootstrap.yml`.
-- `roles/common/` — роль, выполняющая всё первичное конфигурирование.
-- Локальное состояние контроллера (вне репозитория): `~/.ansible/common/`
-  - `local_vars/` — кеш сгенерированных логинов/паролей по хостам.
-  - `generated_keys/` — приватные/публичные SSH ключи, созданные для пользователей на хостах.
-  - `.vault_password` — файл с паролем к Ansible Vault.
+## Layout
+- `inventory/hosts.yml`: canonical inventory (format doc: `inventory/README.md`).
+- `group_vars/`: group variables; `group_vars/all/vault.yml` (Ansible Vault) holds all secrets.
+- `playbooks/`: entrypoint `playbooks/remnanode-bootstrap.yml`.
+- `roles/common/`: the primary configuration role.
+- Local controller state (outside the repo): `~/.ansible/common/`
+  - `local_vars/`: cached generated usernames/passwords per host.
+  - `generated_keys/`: SSH keypairs generated for managed users.
+  - `.vault_password`: Vault password file.
 
-## Секреты и Vault
-- Vault-файл: `group_vars/all/vault.yml` (зашифрован).
-- Файл пароля: `~/.ansible/common/.vault_password` (используется автоматически из `ansible.cfg`).
-- Просмотр/редактирование:
+## Secrets & Vault
+- Vault file: `group_vars/all/vault.yml` (encrypted).
+- Password file: `~/.ansible/common/.vault_password` (referenced in `ansible.cfg`).
+- View/edit:
   - `ansible-vault view group_vars/all/vault.yml`
   - `ansible-vault edit group_vars/all/vault.yml`
-- Добавляйте новые чувствительные значения как `vault_common_*` и ссылайтесь на них из `roles/common/defaults/main.yml` или соответствующих vars.
+- Add new secrets as `vault_common_*` and map them in `roles/common/defaults/main.yml` (or relevant vars files) before use.
 
-## Запуск
-- Все хосты:  
-  `ansible-playbook playbooks/shield-bootstrap.yml`
-- Отдельный хост/группа:  
-  `ansible-playbook playbooks/shield-bootstrap.yml -l <host_or_group>`
-- Проверка без изменений:  
-  `ansible-playbook playbooks/shield-bootstrap.yml -l <host> --check`
+## Running
+- All hosts:  
+  `ansible-playbook playbooks/remnanode-bootstrap.yml`
+- Single host/group:  
+  `ansible-playbook playbooks/remnanode-bootstrap.yml -l <host_or_group>`
+- Check mode:  
+  `ansible-playbook playbooks/remnanode-bootstrap.yml -l <host> --check`
 
-## Инвентарь
-- Данные хостов в `all.hosts` + группировки по `project`, `environment`, `region`, `role`.
-- Вынос общих переменных в `group_vars/<group>.yml`; не хранить секреты вне Vault.
-- После изменений удобно проверять:  
+## Inventory
+- Host data under `all.hosts` plus grouping by `project`, `environment`, `region`, `role`.
+- Put shared settings in `group_vars/<group>.yml`; keep secrets only in Vault.
+- Quick validation:  
   `ansible-inventory --list -i inventory/hosts.yml`
 
-## SSH и пользователи
-- Роль генерирует локально случайные логин/пароль и ключ (ed25519), создаёт пользователя, разворачивает ключ на хосте и:
-  - сохраняет креды в `~/.ansible/common/local_vars/<host>.yml`;
-  - копирует приватный ключ в `~/.ssh/<host>_<user>.key`;
-  - обновляет `~/.ssh/config` для Host `<inventory_hostname>` (User, IdentityFile, Port, HostName) и добавляет комментарии.
-- При повторных запусках использует уже сохранённые логин/пароль/ключ.
+## SSH & Users
+- The role generates a random username/password and an ed25519 key locally, creates the user, deploys the key, and:
+  - caches creds in `~/.ansible/common/local_vars/<host>.yml`;
+  - copies the private key to `~/.ssh/<host>_<user>.key`;
+  - updates `~/.ssh/config` for Host `<inventory_hostname>` (User, IdentityFile, Port, HostName) with comments.
+- Subsequent runs reuse the cached username/password/key.
 
-## Tailscale и Firewall
-- Использует ключ из `vault_common_tailscale_authkey`.
-- После настройки SSH-порта и Tailscale обновляет HostName/Port в локальном `~/.ssh/config`.
-- UFW настраивается на кастомный SSH-порт и 443.
+## Tailscale & Firewall
+- Uses `vault_common_tailscale_authkey`.
+- After setting SSH port and Tailscale, updates HostName/Port in local `~/.ssh/config`.
+- UFW is configured for the custom SSH port and 443.
 
 ## Alloy
-- Конфиг (`roles/common/templates/alloy/config.alloy.j2`) читает параметры из env vars, которые задаются в `env.conf.j2` через переменные `common_alloy_*` (берутся из Vault).
-- Заполненность критичных переменных проверяется assert’ами в роли `alloy`.
+- `roles/common/templates/alloy/config.alloy.j2` reads settings from env vars set in `env.conf.j2` via `common_alloy_*` (sourced from Vault).
+- Required values are validated by asserts in the `alloy` tasks.
 
-## Добавление нового хоста
-1. Добавьте запись в `inventory/hosts.yml` и включите её в нужные группы (`project_*`, `env_*`, `region_*`, `role_*`).
-2. Убедитесь, что необходимые секреты есть в Vault.
-3. При первом подключении используйте параметры от провайдера (добавьте вручную Host-блок в `~/.ssh/config`, если нужно).
-4. Запустите: `ansible-playbook playbooks/shield-bootstrap.yml -l <host>`.
-5. Проверьте обновлённый блок в `~/.ssh/config` и локальные файлы в `~/.ansible/common/`.
+## Adding a new host
+1. Add the host to `inventory/hosts.yml` and include it in the needed groups (`project_*`, `env_*`, `region_*`, `role_*`).
+2. Ensure required secrets are present in Vault.
+3. For the first SSH access, use provider credentials (add a temporary Host block to `~/.ssh/config` if needed).
+4. Run: `ansible-playbook playbooks/remnanode-bootstrap.yml -l <host>`.
+5. Check the updated block in `~/.ssh/config` and the local cache in `~/.ansible/common/`.
 
-## Полезные команды
-- Проверить SSH-блоки после плейбука: `grep -A4 "Host <host>" ~/.ssh/config`
-- Проверить содержимое Vault: `ansible-vault view group_vars/all/vault.yml`
-- Визуализировать инвентарь: `ansible-inventory --graph -i inventory/hosts.yml`
+## Useful commands
+- Inspect SSH entries: `grep -A4 "Host <host>" ~/.ssh/config`
+- View Vault contents: `ansible-vault view group_vars/all/vault.yml`
+- Inventory graph: `ansible-inventory --graph -i inventory/hosts.yml`
 
-## Безопасность
-- Не коммитить `~/.ansible/common/` и любые кеши/ключи (они вне репозитория).
-- Если нужно сменить пароль Vault — обновите `~/.ansible/common/.vault_password` и перешифруйте `group_vars/all/vault.yml`.
-- Регулярно чистите старые ключи/кеши, если хосты удалены.
+## Security
+- Do not commit `~/.ansible/common/` or any cached keys/creds (they’re outside the repo).
+- To rotate the Vault password, update `~/.ansible/common/.vault_password` and rekey `group_vars/all/vault.yml`.
+- Periodically clean old keys/caches if hosts are removed.
