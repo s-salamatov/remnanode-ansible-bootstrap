@@ -13,13 +13,40 @@
     owner: root
     group: root
     mode: "0600"
-  notify: Restart SSH Safely
 
 - name: Test sshd config
   ansible.builtin.command: sshd -t
   register: common_ssh_config_test_result
   changed_when: false
   failed_when: common_ssh_config_test_result.rc != 0
+
+- name: Reload SSH with verification (no handler)
+  block:
+    - name: Reload SSH service
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+
+    # Verify sshd is listening on the new port locally (firewall/Tailscale independent)
+    - name: Wait for SSH port to be open on localhost
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ common_ssh_port }}"
+        state: started
+        timeout: 30
+
+  rescue:
+    - name: Rollback SSH config after failed reload
+      ansible.builtin.copy:
+        src: /etc/ssh/sshd_config.bak
+        dest: /etc/ssh/sshd_config
+        remote_src: true
+        mode: "0600"
+
+    - name: Reload ssh after rollback
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
 
 - name: Update local SSH config port for host
   community.general.ssh_config:
