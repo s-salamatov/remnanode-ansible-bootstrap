@@ -1,40 +1,49 @@
 # Handler to reload SSH only after verifying new config works, with rollback path
-- name: Restart SSH Safely
-  block:
-    - name: Wait for SSH port to be open on new config
-      ansible.builtin.wait_for:
-        host: "{{ inventory_hostname }}"
-        port: "{{ common_ssh_port }}"
-        state: started
-        timeout: 30
-      delegate_to: localhost
-      become: false
+- name: Reload SSH service
+  listen: Restart SSH Safely
+  ansible.builtin.service:
+    name: ssh
+    state: reloaded
 
-    - name: Test SSH login with new config
-      ansible.builtin.command: >
-        ssh -p {{ common_ssh_port }}
-        -i {{ common_control_generated_keys_dir }}/{{ inventory_hostname }}_{{ common_user_name }}.key
-        -o BatchMode=yes
-        -o StrictHostKeyChecking=no
-        {{ common_user_name }}@{{ inventory_hostname }} true
-      delegate_to: localhost
-      register: ssh_test
-      changed_when: false
-      failed_when: ssh_test.rc != 0
-      become: false
+- name: Wait for SSH port to be open on new config
+  listen: Restart SSH Safely
+  ansible.builtin.wait_for:
+    host: "{{ inventory_hostname }}"
+    port: "{{ common_ssh_port }}"
+    state: started
+    timeout: 30
+  delegate_to: localhost
+  become: false
 
-  rescue:
-    - name: Rollback SSH config (rescue block)
-      ansible.builtin.copy:
-        src: /etc/ssh/sshd_config.bak
-        dest: /etc/ssh/sshd_config
-        remote_src: true
-        mode: "0600"
+- name: Test SSH login with new config
+  listen: Restart SSH Safely
+  ansible.builtin.command: >
+    ssh -p {{ common_ssh_port }}
+    -i {{ common_control_generated_keys_dir }}/{{ inventory_hostname }}_{{ common_user_name }}.key
+    -o BatchMode=yes
+    -o StrictHostKeyChecking=no
+    {{ common_user_name }}@{{ inventory_hostname }} true
+  delegate_to: localhost
+  register: ssh_test
+  changed_when: false
+  failed_when: ssh_test.rc != 0
+  become: false
 
-    - name: Reload ssh after rollback
-      ansible.builtin.service:
-        name: ssh
-        state: reloaded
+- name: Rollback SSH config if test failed
+  listen: Restart SSH Safely
+  ansible.builtin.copy:
+    src: /etc/ssh/sshd_config.bak
+    dest: /etc/ssh/sshd_config
+    remote_src: true
+    mode: "0600"
+  when: ssh_test is failed
+
+- name: Reload ssh after rollback
+  listen: Restart SSH Safely
+  ansible.builtin.service:
+    name: ssh
+    state: reloaded
+  when: ssh_test is failed
 
 - name: Reload Alloy daemon
   ansible.builtin.systemd:

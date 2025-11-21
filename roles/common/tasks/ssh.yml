@@ -21,11 +21,6 @@
   changed_when: false
   failed_when: common_ssh_config_test_result.rc != 0
 
-- name: Soft reload SSH service
-  ansible.builtin.service:
-    name: ssh
-    state: reloaded
-
 - name: Update local SSH config port for host
   community.general.ssh_config:
     ssh_config_file: "{{ common_local_ssh_config }}"

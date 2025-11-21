@@ -1,4 +1,4 @@
-# Shared connection settings for every host in project_shield
+# Example group vars for remnanode project
 ansible_become: true
 ansible_become_method: sudo
 ansible_python_interpreter: /usr/bin/python3.12

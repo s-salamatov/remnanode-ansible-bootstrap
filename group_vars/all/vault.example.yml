@@ -1,0 +1,10 @@
+# Example vault variables (encrypt your real values with ansible-vault)
+vault_common_tailscale_authkey: "TAILSCALE_AUTH_KEY_GOES_HERE"
+vault_common_alloy_metrics_id: "GRAFANA_METRICS_ID"
+vault_common_alloy_metrics_url: "https://prometheus.example.com/api/prom/push"
+vault_common_alloy_logs_id: "GRAFANA_LOGS_ID"
+vault_common_alloy_logs_url: "https://logs.example.com/loki/api/v1/push"
+vault_common_alloy_fm_url: "https://fleet-management.example.com"
+vault_common_alloy_fm_poll_frequency: "60s"
+vault_common_alloy_fm_hosted_id: "FLEET_HOSTED_ID"
+vault_common_alloy_integration_token: "GRAFANA_API_TOKEN"

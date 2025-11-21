@@ -75,8 +75,8 @@
   ansible.builtin.copy:
     dest: "{{ common_control_local_vars_dir }}/{{ inventory_hostname }}.yml"
     content: |
-      common_user_name: "{{ common_user_name }}"
-      common_user_password: "{{ common_user_password }}"
+      common_user_name: '{{ common_user_name | replace("'", "''") }}'
+      common_user_password: '{{ common_user_password | replace("'", "''") }}'
     mode: "0600"
   delegate_to: localhost
   become: false

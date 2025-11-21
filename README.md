@@ -8,14 +8,21 @@ Playbooks and a common role to bootstrap and harden new remnanode hosts: users a
 - SSH access to targets with the provider’s initial credentials for the first run.
 
 ## Layout
-- `inventory/hosts.yml`: canonical inventory (format doc: `inventory/README.md`).
-- `group_vars/`: group variables; `group_vars/all/vault.yml` (Ansible Vault) holds all secrets.
+- `inventory/hosts.example.yml`: inventory template (format doc: `inventory/README.md`).
+- `group_vars/*.example.yml`: variable templates; real files live in `~/.ansible/common/inventory/group_vars/`.
 - `playbooks/`: entrypoint `playbooks/remnanode-bootstrap.yml`.
 - `roles/common/`: the primary configuration role.
 - Local controller state (outside the repo): `~/.ansible/common/`
   - `local_vars/`: cached generated usernames/passwords per host.
   - `generated_keys/`: SSH keypairs generated for managed users.
   - `.vault_password`: Vault password file.
+
+## Local setup (copy examples)
+- Inventory lives at `~/.ansible/common/inventory/hosts.yml` (see `ansible.cfg`). Start with:
+  - `cp inventory/hosts.example.yml ~/.ansible/common/inventory/hosts.yml`
+  - `cp -R group_vars ~/.ansible/common/inventory/` and rename the examples (e.g., `group_vars/project_remnanode.example.yml` -> `group_vars/project_remnanode.yml`; `group_vars/all/vault.example.yml` -> `group_vars/all/vault.yml`, then encrypt with `ansible-vault encrypt`).
+- Vault password file: create `~/.ansible/common/.vault_password` (0600) with your password.
+- SSH config: optional starter at `ssh_config.example`; merge relevant blocks into `~/.ssh/config`.
 
 ## Secrets & Vault
 - Vault file: `group_vars/all/vault.yml` (encrypted).
@@ -32,6 +39,15 @@ Playbooks and a common role to bootstrap and harden new remnanode hosts: users a
   `ansible-playbook playbooks/remnanode-bootstrap.yml -l <host_or_group>`
 - Check mode:  
   `ansible-playbook playbooks/remnanode-bootstrap.yml -l <host> --check`
+- First-time password-based bootstrap (provider creds):  
+  ```
+  ansible-playbook playbooks/remnanode-bootstrap.yml \
+    -l <host> \
+    --ask-pass \
+    --ask-become-pass \
+    -e "ansible_user=<provider_user> ansible_port=<provider_port> ansible_ssh_common_args='-o StrictHostKeyChecking=no'"
+  ```
+  Use `--ask-become-pass` only if sudo prompts for a password; drop `ansible_ssh_common_args` after the first trust. Subsequent runs can use the generated user/key from `~/.ssh/config`.
 
 ## Inventory
 - Host data under `all.hosts` plus grouping by `project`, `environment`, `region`, `role`.

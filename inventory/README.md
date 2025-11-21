@@ -1,5 +1,7 @@
 # Inventory Guidelines (Remnanode Ansible Bootstrap)
 
+> Inventory is stored locally at `~/.ansible/common/inventory/hosts.yml`. This directory mirrors `inventory/` and `group_vars/` examples from the repo—copy and adapt before running playbooks.
+
 ## Format
 - Use the YAML inventory stored at `inventory/hosts.yml`. INI files are no longer supported here.
 - The root layout is `all -> hosts` (hostvars) plus `all -> children -> <category> -> children -> <group> -> hosts`.

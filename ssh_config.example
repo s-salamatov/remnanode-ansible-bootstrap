@@ -1,0 +1,7 @@
+# Example SSH config entry for a freshly bootstrapped host
+Host remnanode-proxy-1
+    HostName remnanode-proxy-1
+    Port 22
+    User root
+    # Update IdentityFile after the first playbook run
+    IdentityFile ~/.ssh/remnanode-proxy-1_bootstrap.key

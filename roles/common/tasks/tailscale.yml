@@ -22,6 +22,46 @@
       - common_tailscale_authkey | default('') | length > 0
     fail_msg: "common_tailscale_authkey is required. Store it in group_vars/all/vault.yml as vault_common_tailscale_authkey."
 
+# --- Kernel/network prerequisites ---
+- name: Ensure ethtool is installed (for GRO tweaks)
+  ansible.builtin.apt:
+    name: ethtool
+    state: present
+    update_cache: false
+  when: ansible_facts.os_family == "Debian"
+
+- name: Enable IP forwarding for exit-node support
+  ansible.builtin.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop:
+    - { name: "net.ipv4.ip_forward", value: "1" }
+    - { name: "net.ipv6.conf.all.forwarding", value: "1" }
+  when: ansible_facts.os_family == "Debian"
+
+- name: Capture current GRO settings on primary interface
+  ansible.builtin.command: ethtool -k {{ ansible_default_ipv4.interface }}
+  register: common_tailscale_ethtool_features
+  changed_when: false
+  failed_when: false
+  when: ansible_default_ipv4 is defined
+
+- name: Enable UDP GRO forwarding when disabled
+  ansible.builtin.command: ethtool -K {{ ansible_default_ipv4.interface }} rx-udp-gro-forwarding on
+  when:
+    - ansible_default_ipv4 is defined
+    - common_tailscale_ethtool_features.stdout is defined
+    - "'rx-udp-gro-forwarding: on' not in common_tailscale_ethtool_features.stdout"
+
+- name: Enable generic receive offload (GRO) when disabled
+  ansible.builtin.command: ethtool -K {{ ansible_default_ipv4.interface }} gro on
+  when:
+    - ansible_default_ipv4 is defined
+    - common_tailscale_ethtool_features.stdout is defined
+    - "'generic-receive-offload: on' not in common_tailscale_ethtool_features.stdout"
+
 # --- Manual install flow for geo-restricted (RU) hosts ---
 - name: Determine manual Tailscale architecture (RU hosts)
   ansible.builtin.set_fact:
@@ -83,6 +123,13 @@
     - "'region_ru' in group_names"
     - common_tailscale_needs_install | default(true)
 
+- name: Set local control-plane archive path (RU hosts)
+  ansible.builtin.set_fact:
+    common_tailscale_manual_archive_local_path: "{{ common_control_base_dir }}/downloads/{{ common_tailscale_manual_archive }}"
+  when:
+    - "'region_ru' in group_names"
+    - common_tailscale_needs_install | default(true)
+
 # Provide a summary when running with --check so operators know the intended actions
 - name: Show manual Tailscale install plan (RU hosts, check mode)
   ansible.builtin.debug:
@@ -102,11 +149,43 @@
     - common_tailscale_needs_install | default(true)
     - not ansible_check_mode
   block:
-    - name: Download manual Tailscale archive
-      ansible.builtin.get_url:
-        url: "{{ common_tailscale_manual_download_url }}"
-        dest: "{{ common_tailscale_manual_archive_path }}"
-        mode: "0644"
+    - name: Fetch manual Tailscale archive with remote-first fallback
+      block:
+        - name: Download manual Tailscale archive on remote host
+          ansible.builtin.get_url:
+            url: "{{ common_tailscale_manual_download_url }}"
+            dest: "{{ common_tailscale_manual_archive_path }}"
+            mode: "0644"
+        - name: Note download source (remote)
+          ansible.builtin.set_fact:
+            common_tailscale_manual_download_source: remote
+      rescue:
+        - name: Ensure local download dir exists
+          ansible.builtin.file:
+            path: "{{ common_control_base_dir }}/downloads"
+            state: directory
+            mode: "0700"
+          delegate_to: localhost
+          run_once: true
+          become: false
+
+        - name: Download manual Tailscale archive on control host
+          ansible.builtin.get_url:
+            url: "{{ common_tailscale_manual_download_url }}"
+            dest: "{{ common_tailscale_manual_archive_local_path }}"
+            mode: "0644"
+          delegate_to: localhost
+          become: false
+
+        - name: Copy manual Tailscale archive from control host to remote
+          ansible.builtin.copy:
+            src: "{{ common_tailscale_manual_archive_local_path }}"
+            dest: "{{ common_tailscale_manual_archive_path }}"
+            mode: "0644"
+
+        - name: Note download source (control)
+          ansible.builtin.set_fact:
+            common_tailscale_manual_download_source: control
 
     - name: Extract manual Tailscale archive
       ansible.builtin.unarchive:
@@ -144,6 +223,9 @@
         mode: "0644"
         content: |
           # Managed by Ansible. Override tailscaled environment variables here.
+          # Use 0 to let tailscaled choose a random available port.
+          PORT=0
+          FLAGS=
 
     - name: Create Tailscale data directories
       ansible.builtin.file:

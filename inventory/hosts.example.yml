@@ -1,0 +1,73 @@
+# Example inventory: host vars plus grouping by project/env/region/role
+all:
+  hosts:
+    remnanode-proxy-de-1-prod:
+      project: remnanode
+      role: proxy
+      env: prod
+      region: de
+    remnanode-proxy-fi-1-prod:
+      project: remnanode
+      role: proxy
+      env: prod
+      region: fi
+    remnanode-proxy-ru-1-prod:
+      project: remnanode
+      role: proxy
+      env: prod
+      region: ru
+    remnanode-proxy-ru-2-dev:
+      project: remnanode
+      role: proxy
+      env: dev
+      region: ru
+    remnanode-proxy-us-1-prod:
+      project: remnanode
+      role: proxy
+      env: prod
+      region: us
+  children:
+    project:
+      children:
+        project_remnanode:
+          hosts:
+            remnanode-proxy-de-1-prod: {}
+            remnanode-proxy-fi-1-prod: {}
+            remnanode-proxy-ru-1-prod: {}
+            remnanode-proxy-ru-2-dev: {}
+            remnanode-proxy-us-1-prod: {}
+    environment:
+      children:
+        env_prod:
+          hosts:
+            remnanode-proxy-de-1-prod: {}
+            remnanode-proxy-fi-1-prod: {}
+            remnanode-proxy-ru-1-prod: {}
+            remnanode-proxy-us-1-prod: {}
+        env_dev:
+          hosts:
+            remnanode-proxy-ru-2-dev: {}
+    region:
+      children:
+        region_de:
+          hosts:
+            remnanode-proxy-de-1-prod: {}
+        region_fi:
+          hosts:
+            remnanode-proxy-fi-1-prod: {}
+        region_ru:
+          hosts:
+            remnanode-proxy-ru-1-prod: {}
+            remnanode-proxy-ru-2-dev: {}
+        region_us:
+          hosts:
+            remnanode-proxy-us-1-prod: {}
+    role:
+      children:
+        role_proxy:
+          hosts:
+            remnanode-proxy-de-1-prod: {}
+            remnanode-proxy-fi-1-prod: {}
+            remnanode-proxy-ru-1-prod: {}
+            remnanode-proxy-ru-2-dev: {}
+            remnanode-proxy-us-1-prod: {}
