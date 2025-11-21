@@ -9,6 +9,8 @@
 # todo: Add handler to clean up old Tailscale versions if needed
 # todo: Add handler to restart headscale if it used as control plane due to acls non-idempotency
 # todo: Add devug info about tailscale status and ips, routes after installation
+# todo: Add checksum/signature verification and version pinning for installer downloads
+# todo: Make tailscale up/reset/advertise flags configurable and skip when prefs already match
 # Detect existing installations so we can skip reinstalling binaries
 - name: Check current Tailscale installation state
   ansible.builtin.command: tailscale version
@@ -162,6 +164,7 @@
   block:
     - name: Fetch manual Tailscale archive with remote-first fallback
       block:
+        # todo: Validate archive checksum/signature before extracting
         - name: Download manual Tailscale archive on remote host
           ansible.builtin.get_url:
             url: "{{ common_tailscale_manual_download_url }}"
@@ -319,6 +322,7 @@
     - not ansible_check_mode
     - common_tailscale_needs_install | default(true)
   register: common_tailscale_install_result
+  # todo: Pin installer version and verify checksum/signature before execution
 
 # ---- tailscale up ----
 
@@ -340,6 +344,7 @@
     - not ansible_check_mode
   register: common_tailscale_up_result
   changed_when: "'already' not in (common_tailscale_up_result.stdout | default(''))"
+  # todo: Skip tailscale up when prefs already match and gate flags (--reset/exit-node/connector) behind variables
 
 - name: Check tailscale presence and show intended up command (check mode)
   ansible.builtin.command: tailscale status

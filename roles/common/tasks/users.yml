@@ -11,6 +11,7 @@
 # todo: Add ansible service user creation option
 # todo: Add integration with LDAP or other centralized user management systems
 # todo: Add option to authenticate via SSH key and 2FA
+# todo: Make sudo privileges configurable (passwordless/none/passworded) and allow key-only workflows without storing passwords
 # --- Local credential caching on control host ---
 - name: Ensure local dir for stored user vars exists
   ansible.builtin.file:
@@ -167,6 +168,7 @@
   delegate_to: localhost
   become: false
   throttle: 1
+  # todo: Avoid writing passwords into ~/.ssh/config; keep secrets in protected local vars instead
 
 - name: Deploy authorized key to remote user
   ansible.posix.authorized_key:

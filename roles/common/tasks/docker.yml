@@ -7,6 +7,7 @@
 # todo: Add cleanup tasks for removing unused images, containers, and volumes
 # todo: Add verification steps to ensure Docker is functioning correctly after installation
 # todo: Add support for kubernetes installation and configuration if needed
+# todo: Pin Docker package versions and add periodic prune/cleanup timers or systemd units
 
 # Install Docker Engine and apply baseline configuration on Debian hosts
 

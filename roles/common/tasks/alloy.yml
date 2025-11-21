@@ -9,6 +9,7 @@
 # todo: Add option to configure Alloy to use external databases if needed
 # todo: Add option to backup and restore Alloy configuration
 # todo: Add support for changing configuration via Ansible after initial setup
+# todo: Add alloy config check/HTTP health probe and only restart when healthy
 
 # Install/update Grafana Alloy only when necessary
 - name: Prepare Alloy facts

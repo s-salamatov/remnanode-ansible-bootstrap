@@ -29,6 +29,7 @@
   changed_when: false
   failed_when: common_ssh_config_test_result.rc != 0
 
+# todo: Convert reload to handler + add wait_for on common_ssh_port with serial to reduce lockout risk
 - name: Reload SSH with verification (no handler)
   block:
     - name: Reload SSH daemon
@@ -51,6 +52,7 @@
       when: common_local_ssh_config is defined
 
   rescue:
+    # todo: Move restart into a handler and add wait_for on the new port to avoid lockouts
     - name: Rollback SSH config after failed reload
       ansible.builtin.copy:
         src: /etc/ssh/sshd_config.bak

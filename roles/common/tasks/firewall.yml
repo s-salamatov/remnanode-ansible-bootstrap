@@ -2,6 +2,7 @@
 # todo: Add option to choose between UFW and other firewall management tools
 # todo: Add IPv6 support
 # todo: Add logging and monitoring configuration for firewall
+# todo: Set default policies/logging level explicitly and allow Tailscale interface traffic before enabling
 # Configure uncomplicated firewall (UFW) with Tailscale-friendly rules
 
 - name: Ensure ufw package is installed
