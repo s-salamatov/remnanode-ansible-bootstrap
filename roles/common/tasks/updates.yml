@@ -1,5 +1,4 @@
 # todo: Consider moving reboot handling to a separate role
-# todo: Consider moving unattended-upgrades configuration to a separate role
 # todo: Consider moving Docker repo cleanup to a Docker-specific role
 
 # Patch, upgrade, and configure unattended updates on Debian hosts
@@ -63,31 +62,7 @@
 
 # --- automatic security updates (no auto reboot) ---
 
-- name: Ensure unattended-upgrades package is installed
-  ansible.builtin.apt:
-    name: unattended-upgrades
-    state: present
-  when: ansible_facts.os_family == "Debian"
-
-- name: Enable periodic unattended upgrades
-  ansible.builtin.copy:
-    dest: /etc/apt/apt.conf.d/20auto-upgrades
-    owner: root
-    group: root
-    mode: "0644"
-    content: |
-      APT::Periodic::Update-Package-Lists "1";
-      APT::Periodic::Unattended-Upgrade "1";
-  when: ansible_facts.os_family == "Debian"
-
-- name: Configure unattended-upgrades to avoid automatic reboot
-  ansible.builtin.copy:
-    dest: /etc/apt/apt.conf.d/51unattended-upgrades-local
-    owner: root
-    group: root
-    mode: "0644"
-    content: |
-      // Local overrides for unattended-upgrades
-      Unattended-Upgrade::Automatic-Reboot "false";
-      Unattended-Upgrade::Automatic-Reboot-WithUsers "false";
+- name: Configure unattended upgrades
+  ansible.builtin.import_role:
+    name: unattended_upgrades
   when: ansible_facts.os_family == "Debian"
