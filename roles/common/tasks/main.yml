@@ -33,8 +33,9 @@
 - name: Include firewall tasks
   ansible.builtin.import_tasks: firewall.yml
 
-- name: Include docker tasks
-  ansible.builtin.import_tasks: docker.yml
+- name: Include docker role
+  ansible.builtin.import_role:
+    name: docker
 
 - name: Include Alloy tasks
   ansible.builtin.import_tasks: alloy.yml

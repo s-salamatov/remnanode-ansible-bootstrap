@@ -1,33 +1,5 @@
 # todo: Consider moving reboot handling to a separate role
-# todo: Consider moving Docker repo cleanup to a Docker-specific role
-
 # Patch, upgrade, and configure unattended updates on Debian hosts
-- name: Remove Docker repo entries from /etc/apt/sources.list
-  ansible.builtin.lineinfile:
-    path: /etc/apt/sources.list
-    regexp: '^.*download\.docker\.com.*$'
-    state: absent
-  check_mode: false
-  when: ansible_facts.os_family == "Debian"
-
-- name: Find legacy Docker apt sources
-  ansible.builtin.find:
-    paths: /etc/apt/sources.list.d
-    patterns: "*docker*.list*"
-    file_type: file
-  register: common_docker_repo_files
-  when: ansible_facts.os_family == "Debian"
-
-- name: Remove legacy Docker apt sources to avoid conflicts
-  ansible.builtin.file:
-    path: "{{ item.path }}"
-    state: absent
-  check_mode: false
-  loop: "{{ common_docker_repo_files.files }}"
-  when:
-    - ansible_facts.os_family == "Debian"
-    - common_docker_repo_files is defined
-    - common_docker_repo_files.matched | default(0) > 0
 
 - name: Update apt cache
   ansible.builtin.apt:
