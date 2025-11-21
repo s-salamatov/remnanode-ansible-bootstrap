@@ -1,5 +1,15 @@
 # yamllint disable rule:line-length
 ---
+# todo: Add comments explaining each step
+# todo: Add error handling and retries for network-related tasks
+# todo: Add support for configuring Alloy with different options (e.g., custom ports, TLS settings)
+# todo: Add verification steps to ensure Alloy is functioning correctly after installation
+# todo: Add support for other monitoring agents if needed
+# todo: Add support for Grafana PDC installation if required
+# todo: Add option to configure Alloy to use external databases if needed
+# todo: Add option to backup and restore Alloy configuration
+# todo: Add support for changing configuration via Ansible after initial setup
+
 # Install/update Grafana Alloy only when necessary
 - name: Prepare Alloy facts
   ansible.builtin.set_fact:

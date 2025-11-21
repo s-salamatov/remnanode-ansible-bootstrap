@@ -1,3 +1,12 @@
+# todo: Add option to configure SSH key types and lengths
+# todo: Add integretions with ssh-agents
+# todo: Add option to manage known_hosts entries
+# todo: Add option to configure SSH login banners
+# todo: Add check for SSH service availability after changes
+# todo: Add option to configure SSH client settings on remote hosts
+# todo: Implement SSH hardening best practices based on security benchmarks
+# todo: Add option to enable fail2ban or similar intrusion prevention tools
+# todo: Add support for SSH certificate authorities
 # Harden sshd_config and verify before reloading service
 - name: Backup old sshd_config
   ansible.builtin.copy:
@@ -22,18 +31,24 @@
 
 - name: Reload SSH with verification (no handler)
   block:
-    - name: Reload SSH service
-      ansible.builtin.service:
-        name: ssh
-        state: reloaded
+    - name: Reload SSH daemon
+      ansible.builtin.systemd:
+        daemon_reload: true
 
-    # Verify sshd is listening on the new port locally (firewall/Tailscale independent)
-    - name: Wait for SSH port to be open on localhost
-      ansible.builtin.wait_for:
-        host: 127.0.0.1
-        port: "{{ common_ssh_port }}"
-        state: started
-        timeout: 30
+    - name: Restart SSH
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted
+
+    - name: Update local SSH config port for host
+      community.general.ssh_config:
+        ssh_config_file: "{{ common_local_ssh_config }}"
+        host: "{{ inventory_hostname }}"
+        port: "{{ common_ssh_port | string }}"
+      delegate_to: localhost
+      become: false
+      throttle: 1
+      when: common_local_ssh_config is defined
 
   rescue:
     - name: Rollback SSH config after failed reload
@@ -43,17 +58,11 @@
         remote_src: true
         mode: "0600"
 
-    - name: Reload ssh after rollback
-      ansible.builtin.service:
-        name: ssh
-        state: reloaded
+    - name: Reload SSH daemon
+      ansible.builtin.systemd:
+        daemon_reload: true
 
-- name: Update local SSH config port for host
-  community.general.ssh_config:
-    ssh_config_file: "{{ common_local_ssh_config }}"
-    host: "{{ inventory_hostname }}"
-    port: "{{ common_ssh_port | string }}"
-  delegate_to: localhost
-  become: false
-  throttle: 1
-  when: common_local_ssh_config is defined
+    - name: Restart SSH
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted

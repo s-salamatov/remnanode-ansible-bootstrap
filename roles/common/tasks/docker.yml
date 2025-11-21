@@ -1,4 +1,13 @@
 ---
+# todo: Add comments explaining each step
+# todo: Add error handling and retries for network-related tasks
+# todo: Add support for other container runtimes if needed
+# todo: Add options for configuring Docker daemon settings (e.g., storage driver, logging)
+# todo: Add option to configure Docker user namespaces for enhanced security
+# todo: Add cleanup tasks for removing unused images, containers, and volumes
+# todo: Add verification steps to ensure Docker is functioning correctly after installation
+# todo: Add support for kubernetes installation and configuration if needed
+
 # Install Docker Engine and apply baseline configuration on Debian hosts
 
 - name: Install Docker prerequisites

@@ -1,4 +1,11 @@
 # Common role entrypoint – import task files in intended execution order
+# todo: Consider splitting into multiple roles for better modularity
+# todo: Add tags to individual task files for selective execution
+# todo: Add error handling and logging for better traceability
+# todo: Check idempotency of all tasks
+# todo: Add more OS family support beyond Debian
+# todo: Add pre-checks for required variables and system state
+# todo: Document each task file with purpose and usage examples
 - name: Include updates tasks
   ansible.builtin.import_tasks: updates.yml
 
@@ -14,14 +21,14 @@
 - name: Include users tasks
   ansible.builtin.import_tasks: users.yml
 
+- name: Include Tailscale tasks
+  ansible.builtin.import_tasks: tailscale.yml
+
 - name: Include ssh tasks
   ansible.builtin.import_tasks: ssh.yml
 
 - name: Include motd tasks
   ansible.builtin.import_tasks: motd.yml
-
-- name: Include Tailscale tasks
-  ansible.builtin.import_tasks: tailscale.yml
 
 - name: Include firewall tasks
   ansible.builtin.import_tasks: firewall.yml

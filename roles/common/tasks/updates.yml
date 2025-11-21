@@ -1,3 +1,7 @@
+# todo: Consider moving reboot handling to a separate role
+# todo: Consider moving unattended-upgrades configuration to a separate role
+# todo: Consider moving Docker repo cleanup to a Docker-specific role
+
 # Patch, upgrade, and configure unattended updates on Debian hosts
 - name: Remove Docker repo entries from /etc/apt/sources.list
   ansible.builtin.lineinfile:

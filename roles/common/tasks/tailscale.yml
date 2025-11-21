@@ -1,3 +1,14 @@
+# todo: Add building from source option for restricted environments and geo-blocked hosts
+# todo: Add options for different installation methods (e.g., package manager, manual download)
+# todo: Add support for different Tailscale versions and channels (stable, beta, etc.)
+# todo: Add more detailed logging and error handling for installation steps
+# todo: Add idempotency checks to avoid unnecessary reinstalls
+# todo: Add documentation for how to use and configure Tailscale with this role
+# todo: Consider adding options for configuring Tailscale settings (e.g., DNS, routes) via vars
+# todo: Add hadler to restart tailscaled service if config changes
+# todo: Add handler to clean up old Tailscale versions if needed
+# todo: Add handler to restart headscale if it used as control plane due to acls non-idempotency
+# todo: Add devug info about tailscale status and ips, routes after installation
 # Detect existing installations so we can skip reinstalling binaries
 - name: Check current Tailscale installation state
   ansible.builtin.command: tailscale version

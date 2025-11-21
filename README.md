@@ -1,89 +1,96 @@
 # Remnanode Ansible Bootstrap
 
-Playbooks and a common role to bootstrap and harden new remnanode hosts: users and SSH keys, hardened SSHD, Tailscale, UFW, Docker, and Grafana Alloy. All sensitive data and caches live outside the repo so it’s safe to publish under `remnanode-ansible-bootstrap`.
+Ansible playbook and common role to bootstrap and harden remnanode hosts. It patches Debian servers, creates a dedicated admin user with cached credentials, hardens SSH, joins Tailscale (with a manual path for geo-blocked regions), configures UFW, installs Docker, and deploys Grafana Alloy. Secrets and caches live outside the repo so it’s safe to publish on GitHub.
+
+## What you get
+- OS hardening: dist-upgrade, unattended-upgrades (no auto reboot), reboot flag, timezone + chrony, hostname alignment, MOTD noise disabled.
+- Access management: per-host admin user with random username/password and ed25519 key generated locally; credentials cached under `~/.ansible/common/` and injected into `~/.ssh/config`.
+- SSH hardening: moves SSH to `common_ssh_port` (default 2000), disables root/password logins, tests config before restart with rollback.
+- Networking: Tailscale install (official script or manual tarball for `region_ru`), exit-node + LAN access, IP forwarding/GRO tweaks, SSH config updated with new host/port; UFW allows Tailscale SSH and 443 only.
+- Platform bits: Docker Engine with user in `docker` group; Grafana Alloy installed via official script, configured for Grafana Cloud metrics/logs/remote config using vaulted values.
+- Local controller state: inventory, generated credentials, keys, downloads, and vault password live in `~/.ansible/common/` (kept out of git).
 
 ## Requirements
-- Ansible 9+ (tested with ansible-core 2.16 / ansible 12.2).
-- Python 3.x on the control host.
-- SSH access to targets with the provider’s initial credentials for the first run.
+- Control host: Python 3, Ansible 9+ (tested with ansible-core 2.16 / ansible 12.2), SSH access to targets.
+- Collections: `community.general` and `community.crypto` (install with `ansible-galaxy collection install community.general community.crypto`).
+- Targets: Debian-based host with sudo (password or passwordless) and initial provider SSH credentials for the first run.
+- Secrets: Tailscale auth key plus Grafana Cloud IDs/URLs/API token (`vault_common_*`).
 
-## Layout
-- `inventory/hosts.example.yml`: inventory template (format doc: `inventory/README.md`).
-- `group_vars/*.example.yml`: variable templates; real files live in `~/.ansible/common/inventory/group_vars/`.
-- `playbooks/`: entrypoint `playbooks/remnanode-bootstrap.yml`.
-- `roles/common/`: the primary configuration role.
-- Local controller state (outside the repo): `~/.ansible/common/`
-  - `local_vars/`: cached generated usernames/passwords per host.
-  - `generated_keys/`: SSH keypairs generated for managed users.
-  - `.vault_password`: Vault password file.
+## Repository layout
+- `playbooks/remnanode-bootstrap.yml`: entrypoint playbook applying `roles/common`.
+- `roles/common/`: updates, benchmarks placeholder, timezone/chrony, hostname, user + SSH + local cache, Tailscale, MOTD, UFW, Docker, Alloy (config + systemd drop-ins).
+- `inventory/README.md` and `inventory/hosts.example.yml`: inventory shape and examples.
+- `group_vars/*.example.yml`: variable templates; real files live under `~/.ansible/common/inventory/`.
+- `ansible.cfg`: points to `~/.ansible/common/inventory/hosts.yml` and vault password at `~/.ansible/common/.vault_password`.
 
-## Local setup (copy examples)
-- Inventory lives at `~/.ansible/common/inventory/hosts.yml` (see `ansible.cfg`). Start with:
-  - `cp inventory/hosts.example.yml ~/.ansible/common/inventory/hosts.yml`
-  - `cp -R group_vars ~/.ansible/common/inventory/` and rename the examples (e.g., `group_vars/project_remnanode.example.yml` -> `group_vars/project_remnanode.yml`; `group_vars/all/vault.example.yml` -> `group_vars/all/vault.yml`, then encrypt with `ansible-vault encrypt`).
-- Vault password file: create `~/.ansible/common/.vault_password` (0600) with your password.
-- SSH config: optional starter at `ssh_config.example`; merge relevant blocks into `~/.ssh/config`.
+## Prepare your control host (one time)
+1. Install Ansible and collections:
+   ```sh
+   python3 -m pip install "ansible>=9"
+   ansible-galaxy collection install community.general community.crypto
+   ```
+2. Clone this repository and `cd` into it.
+3. Create local inventory and vars from examples:
+   ```sh
+   mkdir -p ~/.ansible/common/inventory
+   cp inventory/hosts.example.yml ~/.ansible/common/inventory/hosts.yml
+   cp -R group_vars ~/.ansible/common/inventory/
+   mv ~/.ansible/common/inventory/group_vars/project_remnanode.example.yml ~/.ansible/common/inventory/group_vars/project_remnanode.yml
+   mv ~/.ansible/common/inventory/group_vars/all/vault.example.yml ~/.ansible/common/inventory/group_vars/all/vault.yml
+   ```
+4. Create the vault password file referenced by `ansible.cfg`:
+   ```sh
+   echo "your-vault-password" > ~/.ansible/common/.vault_password
+   chmod 600 ~/.ansible/common/.vault_password
+   ```
+5. Add secrets to the vault and encrypt:
+   ```sh
+   ansible-vault encrypt ~/.ansible/common/inventory/group_vars/all/vault.yml
+   ansible-vault edit ~/.ansible/common/inventory/group_vars/all/vault.yml
+   ```
+   Populate `vault_common_tailscale_authkey` and all `vault_common_alloy_*` values (metrics/logs/fleet URLs, IDs, and API token).
+6. (Optional) Merge snippets from `ssh_config.example` into `~/.ssh/config` if you want defaults for the very first login.
 
-## Secrets & Vault
-- Vault file: `group_vars/all/vault.yml` (encrypted).
-- Password file: `~/.ansible/common/.vault_password` (referenced in `ansible.cfg`).
-- View/edit:
-  - `ansible-vault view group_vars/all/vault.yml`
-  - `ansible-vault edit group_vars/all/vault.yml`
-- Add new secrets as `vault_common_*` and map them in `roles/common/defaults/main.yml` (or relevant vars files) before use.
-
-## Running
+## Running the playbook
 - All hosts:  
   `ansible-playbook playbooks/remnanode-bootstrap.yml`
-- Single host/group:  
+- Limit to a host or group:  
   `ansible-playbook playbooks/remnanode-bootstrap.yml -l <host_or_group>`
 - Check mode:  
-  `ansible-playbook playbooks/remnanode-bootstrap.yml -l <host> --check`
-- First-time password-based bootstrap (provider creds):  
-  ```
+  `ansible-playbook playbooks/remnanode-bootstrap.yml --check`
+- First bootstrap using provider password/port:  
+  ```sh
   ansible-playbook playbooks/remnanode-bootstrap.yml \
     -l <host> \
     --ask-pass \
     --ask-become-pass \
     -e "ansible_user=<provider_user> ansible_port=<provider_port> ansible_ssh_common_args='-o StrictHostKeyChecking=no'"
   ```
-  Use `--ask-become-pass` only if sudo prompts for a password; drop `ansible_ssh_common_args` after the first trust. Subsequent runs can use the generated user/key from `~/.ssh/config`.
+  Drop `--ask-become-pass` if sudo is passwordless. Remove `ansible_ssh_common_args` after the host key is trusted. Subsequent runs use the generated user/key stored locally.
 
-## Inventory
-- Host data under `all.hosts` plus grouping by `project`, `environment`, `region`, `role`.
-- Put shared settings in `group_vars/<group>.yml`; keep secrets only in Vault.
-- Quick validation:  
-  `ansible-inventory --list -i inventory/hosts.yml`
+## Inventory and variables
+- Real inventory lives at `~/.ansible/common/inventory/hosts.yml`; follow `inventory/README.md` for the category layout (`project_*`, `env_*`, `region_*`, `role_*`).
+- Store shared settings in `~/.ansible/common/inventory/group_vars/<group>.yml`; keep secrets only in the vaulted `group_vars/all/vault.yml`.
+- Quick validation: `ansible-inventory --list -i ~/.ansible/common/inventory/hosts.yml` (or `--graph`).
 
-## SSH & Users
-- The role generates a random username/password and an ed25519 key locally, creates the user, deploys the key, and:
-  - caches creds in `~/.ansible/common/local_vars/<host>.yml`;
-  - copies the private key to `~/.ssh/<host>_<user>.key`;
-  - updates `~/.ssh/config` for Host `<inventory_hostname>` (User, IdentityFile, Port, HostName) with comments.
-- Subsequent runs reuse the cached username/password/key.
+## Generated access and local state
+- Random admin username/password and an ed25519 key are generated per host and cached in `~/.ansible/common/local_vars/<host>.yml` and `~/.ansible/common/generated_keys/`.
+- Private keys are also copied to `~/.ssh/<host>_<user>.key`, and `~/.ssh/config` is updated with host/port/user/identity and a password comment.
+- SSH is moved to `common_ssh_port` (default 2000). Adjust that variable in your vars if you need a different port.
+- Tailscale setup may adjust HostName/Port in your local SSH config to match the new address/port after the first run.
 
-## Tailscale & Firewall
-- Uses `vault_common_tailscale_authkey`.
-- After setting SSH port and Tailscale, updates HostName/Port in local `~/.ssh/config`.
-- UFW is configured for the custom SSH port and 443.
-
-## Alloy
-- `roles/common/templates/alloy/config.alloy.j2` reads settings from env vars set in `env.conf.j2` via `common_alloy_*` (sourced from Vault).
-- Required values are validated by asserts in the `alloy` tasks.
-
-## Adding a new host
-1. Add the host to `inventory/hosts.yml` and include it in the needed groups (`project_*`, `env_*`, `region_*`, `role_*`).
-2. Ensure required secrets are present in Vault.
-3. For the first SSH access, use provider credentials (add a temporary Host block to `~/.ssh/config` if needed).
-4. Run: `ansible-playbook playbooks/remnanode-bootstrap.yml -l <host>`.
-5. Check the updated block in `~/.ssh/config` and the local cache in `~/.ansible/common/`.
+## Notes on services
+- Tailscale: installs via official script or manual tarball flow for `region_ru` hosts, enables exit-node + LAN access, and ensures IP forwarding/GRO settings.
+- Firewall: UFW allows the custom SSH port from the Tailscale range (100.64.0.0/10) and HTTPS on 443; removes the default OpenSSH rule.
+- Docker: installs Docker Engine packages and adds the generated admin user to the `docker` group.
+- Grafana Alloy: installs via Grafana script, writes `/etc/alloy/config.alloy` and a systemd env drop-in from vault values, and enables the service.
 
 ## Useful commands
-- Inspect SSH entries: `grep -A4 "Host <host>" ~/.ssh/config`
-- View Vault contents: `ansible-vault view group_vars/all/vault.yml`
-- Inventory graph: `ansible-inventory --graph -i inventory/hosts.yml`
+- View inventory: `ansible-inventory --list -i ~/.ansible/common/inventory/hosts.yml`
+- Inspect SSH entry: `grep -A4 "Host <host>" ~/.ssh/config`
+- View/edit vault: `ansible-vault view ~/.ansible/common/inventory/group_vars/all/vault.yml`
 
-## Security
-- Do not commit `~/.ansible/common/` or any cached keys/creds (they’re outside the repo).
-- To rotate the Vault password, update `~/.ansible/common/.vault_password` and rekey `group_vars/all/vault.yml`.
-- Periodically clean old keys/caches if hosts are removed.
+## Security housekeeping
+- Keep `~/.ansible/common/` and `~/.ssh/*` out of version control—they contain generated credentials and keys.
+- Rotate the vault password by updating `~/.ansible/common/.vault_password` and rekeying `~/.ansible/common/inventory/group_vars/all/vault.yml`.
+- Clean up cached keys/vars if you decommission hosts.

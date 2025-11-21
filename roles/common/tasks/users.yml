@@ -1,4 +1,16 @@
 # User management: load/create credentials locally and provision them remotely
+# todo: Add option to skip user creation if desired
+# todo: Add support for specifying custom usernames/passwords via vars or vault
+# todo: Add options for SSH key types and passphrases
+# todo: Add error handling for user creation and key generation steps
+# todo: Add documentation for how to use this user management feature
+# todo: Consider adding group management options
+# todo: Consider adding options for configuring user shell and home directory
+# todo: Consider adding options for configuring SSH authorized keys from existing keys
+# todo: Add cleanup options for removing users and keys if needed
+# todo: Add ansible service user creation option
+# todo: Add integration with LDAP or other centralized user management systems
+# todo: Add option to authenticate via SSH key and 2FA
 # --- Local credential caching on control host ---
 - name: Ensure local dir for stored user vars exists
   ansible.builtin.file:

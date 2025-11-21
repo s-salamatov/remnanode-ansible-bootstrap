@@ -1,6 +1,8 @@
 ---
+# todo: Add comments explaining each variable's purpose and usage
+# todo: Group related variables together with headings for better organization
 # Common role defaults (shared vars consumed by multiple tasks)
-common_timezone: UTC
+common_timezone: Etc/UTC
 common_install_chrony: true
 common_reboot_needed: false
 common_ssh_port: 2000

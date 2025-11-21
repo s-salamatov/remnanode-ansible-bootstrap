@@ -1,4 +1,6 @@
 # Handle timezone configuration and time sync services
+# todo: Add options for different time sync services (e.g., NTP, systemd-timesyncd)
+# todo: Add support for different timzones
 - name: Get current timezone
   ansible.builtin.command: timedatectl show -p Timezone --value
   register: common_timezone_current_result

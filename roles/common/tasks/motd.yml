@@ -1,5 +1,7 @@
 ---
 # Disable dynamic MOTD/banner noise for cleaner SSH logins
+# todo: Rewrite tasks to actually remove motd components instead of just disabling them
+# todo: Add options to customize MOTD content if desired
 
 - name: Ensure motd-news is disabled
   ansible.builtin.copy:

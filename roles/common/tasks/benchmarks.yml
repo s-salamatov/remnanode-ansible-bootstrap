@@ -1,4 +1,5 @@
 # Placeholder so benchmark role imports are explicit in play output
+# todo: Implement actual benchmark tasks in the future with configurable options and outputs
 - name: Benchmarks are currently skipped
   ansible.builtin.debug:
     msg: >
