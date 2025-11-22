@@ -3,7 +3,6 @@
 # todo: Add comments explaining each step
 # todo: Add error handling and retries for network-related tasks
 # todo: Add support for configuring Alloy with different options (e.g., custom ports, TLS settings)
-# todo: Add verification steps to ensure Alloy is functioning correctly after installation
 # todo: Add support for other monitoring agents if needed
 # todo: Add support for Grafana PDC installation if required
 # todo: Add option to configure Alloy to use external databases if needed
@@ -132,4 +131,30 @@
     enabled: true
     state: started
   when: common_alloy_binary_stat.stat.exists
+
+- name: Verify Alloy binary is runnable
+  ansible.builtin.command: "{{ common_alloy_binary_path }} --version"
+  register: common_alloy_version_check
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - common_alloy_binary_stat.stat.exists
+
+- name: Verify Alloy service is active
+  ansible.builtin.command: systemctl is-active alloy
+  register: common_alloy_service_active
+  changed_when: false
+  failed_when: common_alloy_service_active.stdout.strip() != 'active'
+  when:
+    - not ansible_check_mode
+    - common_alloy_binary_stat.stat.exists
+
+- name: Verify Alloy service is enabled
+  ansible.builtin.command: systemctl is-enabled alloy
+  register: common_alloy_service_enabled
+  changed_when: false
+  failed_when: common_alloy_service_enabled.stdout.strip() not in ['enabled', 'static']
+  when:
+    - not ansible_check_mode
+    - common_alloy_binary_stat.stat.exists
 # yamllint enable rule:line-length
