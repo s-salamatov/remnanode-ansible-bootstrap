@@ -1,0 +1,10 @@
+# Handlers for Grafana Alloy management
+
+- name: Reload Alloy daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart Alloy
+  ansible.builtin.systemd:
+    name: alloy
+    state: restarted

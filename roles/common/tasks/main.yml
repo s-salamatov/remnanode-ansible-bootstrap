@@ -37,5 +37,6 @@
   ansible.builtin.import_role:
     name: docker
 
-- name: Include Alloy tasks
-  ansible.builtin.import_tasks: alloy.yml
+- name: Include Alloy role
+  ansible.builtin.import_role:
+    name: alloy
